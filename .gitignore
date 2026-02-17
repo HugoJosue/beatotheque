@@ -1,0 +1,20 @@
+# Dépendances
+node_modules/
+.npm
+
+# Fichiers de build Next.js
+.next/
+out/
+
+# Variables d'environnement (JAMAIS committer .env)
+.env
+.env.local
+.env.production
+
+# Prisma
+prisma/migrations/.gitignore
+
+# Divers
+.DS_Store
+*.log
+.vercel

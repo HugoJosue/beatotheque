@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('from') ?? '/dashboard';
@@ -34,7 +34,7 @@ export default function LoginPage() {
       }
 
       router.push(redirectTo);
-      router.refresh(); // Force la mise à jour du layout (Navbar)
+      router.refresh();
     } catch {
       setError('Erreur réseau. Réessayez.');
     } finally {
@@ -74,7 +74,6 @@ export default function LoginPage() {
           />
         </div>
 
-        {/* Message d'erreur */}
         {error && (
           <div className="bg-red-900/30 border border-red-700 text-red-400 rounded-lg px-4 py-2 text-sm">
             {error}
@@ -93,5 +92,13 @@ export default function LoginPage() {
         </p>
       </form>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }

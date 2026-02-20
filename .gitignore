@@ -14,7 +14,13 @@ out/
 # Prisma
 prisma/migrations/.gitignore
 
+# Auto-généré par Next.js
+next-env.d.ts
+
 # Divers
 .DS_Store
 *.log
 .vercel
+
+# Claude Code
+.claude/

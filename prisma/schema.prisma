@@ -1,0 +1,60 @@
+// prisma/schema.prisma
+// Schéma Prisma pour Beatothèque – PostgreSQL hébergé sur Neon
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Neon fournit une URL "pooled" et une URL "directe" — on utilise la directe pour migrations
+  url       = env("DATABASE_URL")
+}
+
+// ─── Utilisateur ─────────────────────────────────────────────────────────────
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String    // Jamais exposé dans les réponses API
+  createdAt    DateTime  @default(now())
+
+  beats        Beat[]    // Un utilisateur possède plusieurs beats (1-N)
+
+  @@map("users") // Nom de la table en base
+}
+
+// ─── Beat ─────────────────────────────────────────────────────────────────────
+model Beat {
+  id         String    @id @default(uuid())
+  title      String
+  bpm        Int
+  style      String    // Genre musical : trap, lo-fi, drill, etc.
+  key        String    // Tonalité : C major, A minor, etc.
+  price      Decimal   @db.Decimal(10, 2)
+  previewUrl String    // URL du fichier audio de prévisualisation
+  createdAt  DateTime  @default(now())
+
+  // Clé étrangère vers l'auteur du beat
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  licenses   License[] // Un beat peut avoir plusieurs licences (1-N)
+
+  @@map("beats")
+}
+
+// ─── License ──────────────────────────────────────────────────────────────────
+model License {
+  id         String   @id @default(uuid())
+  name       String   // Ex: "Lease basique", "Exclusif"
+  price      Decimal  @db.Decimal(10, 2)
+  rightsText String   // Texte légal décrivant les droits accordés
+
+  createdAt  DateTime @default(now())
+
+  // Clé étrangère vers le beat associé
+  beatId     String
+  beat       Beat     @relation(fields: [beatId], references: [id], onDelete: Cascade)
+
+  @@map("licenses")
+}

@@ -179,4 +179,4 @@ curl -X POST http://localhost:3000/api/beats/{BEAT_ID}/licenses \
 
 | Nom | Matricule |
 |-----|-----------|
-| Prénom Nom | XXXXXXXX |
+| Hugo Josue Alcin| 2171623 |

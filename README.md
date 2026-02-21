@@ -175,8 +175,21 @@ curl -X POST http://localhost:3000/api/beats/{BEAT_ID}/licenses \
 
 ---
 
-## 9. Auteur(s)
+## 9. Captures d'écran
+
+### Catalogue public
+![Catalogue des beats](docs/screenshots/catalogue.png)
+
+### Dashboard producteur
+![Dashboard producteur](docs/screenshots/dashboard.png)
+
+### Gestion des licences
+![Gestion des licences](docs/screenshots/licences.png)
+
+---
+
+## 10. Auteur(s)
 
 | Nom | Matricule |
 |-----|-----------|
-| Hugo Josue Alcin| 2171623 |
+| Hugo Josue Alcin | 2171623 |

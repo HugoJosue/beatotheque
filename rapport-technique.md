@@ -53,10 +53,10 @@ Beatothèque est une application web full-stack développée selon le parcours B
 
 | Couche | Dossier | Rôle |
 |--------|---------|------|
-| Model | `src/models/`, `prisma/schema.prisma` | Définitions TypeScript + schéma DB |
-| View | `src/app/` (pages), `src/components/` | Interface React + composants |
-| Controller | `src/controllers/` | Logique métier pure |
-| Routes | `src/app/api/`, `src/routes/index.ts` | Endpoints REST + référence |
+| Model | `backend/models/`, `prisma/schema.prisma` | Définitions TypeScript + schéma DB |
+| View | `src/app/` (pages), `frontend/components/` | Interface React + composants |
+| Controller | `backend/controllers/` | Logique métier pure |
+| Routes | `src/app/api/`, `backend/routes/index.ts` | Endpoints REST + référence |
 
 ---
 
@@ -130,7 +130,13 @@ bcryptjs avec un coût de 12 est utilisé pour le hachage. Ce coût représente 
 
 **Problème :** Le middleware s'exécute avant le rendu des pages et doit vérifier le JWT sans dépendances Node.js.
 
-**Solution :** Extraction de la logique de vérification JWT dans `src/lib/jwt.ts` avec `jose`, appelé directement dans `middleware.ts`. En cas d'échec, redirection vers `/login?from=<pathname>` pour reprendre la navigation après connexion.
+**Solution :** Extraction de la logique de vérification JWT dans `backend/lib/jwt.ts` avec `jose`, appelé directement dans `middleware.ts`. En cas d'échec, redirection vers `/login?from=<pathname>` pour reprendre la navigation après connexion.
+
+### Défi 5 : Système de fichiers Vercel non persistant
+
+**Problème :** L'upload de fichiers audio utilisait `fs.writeFile` pour écrire dans `public/uploads/`. Sur Vercel, le système de fichiers est en lecture seule en production — les fichiers écrits sont perdus dès que la fonction serverless se termine.
+
+**Solution :** Migration vers **Vercel Blob** (`@vercel/blob`). L'API `put()` envoie le fichier directement vers un stockage objet persistant et retourne une URL publique permanente, sans modifier l'interface utilisateur.
 
 ---
 
@@ -138,10 +144,10 @@ bcryptjs avec un coût de 12 est utilisé pour le hachage. Ce coût représente 
 
 ### 4.1 Fonctionnalités
 
-- **Upload audio** : intégration d'un stockage objet (AWS S3 ou Cloudflare R2) pour les fichiers MP3/WAV, au lieu d'URLs externes.
 - **Système de paiement** : intégration Stripe pour l'achat de licences directement dans l'application.
 - **Recherche full-text** : recherche par titre, artiste ou tags avec PostgreSQL `tsvector` ou Elasticsearch.
-- **Gestion des licences depuis le dashboard** : interface CRUD dédiée aux licences dans l'espace producteur.
+- **Lecteur audio intégré** : prévisualisation des beats directement dans le catalogue sans téléchargement.
+- **Profil producteur public** : page publique par utilisateur regroupant tous ses beats.
 
 ### 4.2 Sécurité et performance
 
@@ -152,9 +158,9 @@ bcryptjs avec un coût de 12 est utilisé pour le hachage. Ce coût représente 
 
 ### 4.3 Infrastructure
 
-- **Déploiement Vercel** : configuration `vercel.json` et variables d'environnement de production.
 - **CI/CD** : pipeline GitHub Actions pour linting, build et tests à chaque pull request.
 - **Monitoring** : intégration Sentry pour la capture d'erreurs en production.
+- **Mise à jour Next.js** : migration vers Next.js 15 pour corriger la vulnérabilité de sécurité signalée (décembre 2025).
 
 ---
 

@@ -1,5 +1,9 @@
-// src/components/BeatCard.tsx
-// Carte beat pour la liste du catalogue
+// frontend/components/BeatCard.tsx
+// Carte affichée dans le catalogue pour chaque beat.
+// React.memo évite un re-rendu si les props du beat n'ont pas changé entre
+// deux rendus du composant parent (ex: pagination, filtre de style).
+
+import { memo } from 'react';
 
 interface Beat {
   id: string;
@@ -14,8 +18,9 @@ interface Beat {
 
 interface Props { beat: Beat; }
 
-export function BeatCard({ beat }: Props) {
-  // Initiale de l'auteur pour l'avatar
+// Composant pur : même props → même rendu → la mémoïsation est rentable
+export const BeatCard = memo(function BeatCard({ beat }: Props) {
+  // Initiale de l'auteur pour l'avatar circulaire
   const initial = beat.user.email[0].toUpperCase();
 
   return (
@@ -23,29 +28,30 @@ export function BeatCard({ beat }: Props) {
                     hover:border-violet-500/30 hover:-translate-y-1 hover:shadow-2xl hover:shadow-violet-900/20
                     transition-all duration-300 cursor-pointer">
 
-      {/* Barre d'accent supérieure */}
+      {/* Barre d'accent supérieure — visible uniquement au survol */}
       <div className="h-0.5 w-full bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600
                       opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
       <div className="p-5 space-y-4">
-        {/* Header : style + prix */}
+        {/* Header : style (badge) + prix */}
         <div className="flex items-start justify-between gap-2">
           <span className="badge bg-violet-500/15 text-violet-300 border border-violet-500/20">
             {beat.style}
           </span>
+          {/* Number() convertit le Decimal Prisma en number JavaScript standard */}
           <span className="text-lg font-bold gradient-text shrink-0">
             {Number(beat.price).toFixed(2)} $
           </span>
         </div>
 
-        {/* Titre */}
+        {/* Titre du beat */}
         <div>
           <h3 className="font-bold text-white text-lg leading-tight group-hover:text-violet-100 transition-colors">
             {beat.title}
           </h3>
         </div>
 
-        {/* Waveform décorative */}
+        {/* Waveform décorative (hauteurs fixes, rôle purement visuel) */}
         <div className="flex items-end gap-0.5 h-8 opacity-30 group-hover:opacity-60 transition-opacity">
           {[3,5,7,4,8,6,9,5,7,4,6,8,5,7,3,6,8,4,7,5].map((h, i) => (
             <div
@@ -56,9 +62,10 @@ export function BeatCard({ beat }: Props) {
           ))}
         </div>
 
-        {/* Footer : auteur + specs */}
+        {/* Footer : avatar auteur + BPM + tonalité */}
         <div className="flex items-center justify-between pt-1 border-t border-white/5">
           <div className="flex items-center gap-2">
+            {/* Avatar initiale — généré depuis l'email de l'auteur */}
             <div className="w-6 h-6 rounded-full bg-gradient-to-br from-violet-600 to-purple-700
                             flex items-center justify-center text-[10px] font-bold text-white shrink-0">
               {initial}
@@ -74,4 +81,4 @@ export function BeatCard({ beat }: Props) {
       </div>
     </div>
   );
-}
+});

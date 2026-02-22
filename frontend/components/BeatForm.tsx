@@ -51,6 +51,7 @@ export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLa
   const [dragOver, setDragOver]     = useState(false);   // Zone drag & drop survol
   const [uploading, setUploading]   = useState(false);   // Upload Vercel Blob en cours
   const [uploadedName, setUploadedName] = useState('');  // Nom affiché après upload réussi
+  const [uploadSize, setUploadSize] = useState('');      // Taille du fichier (ex: "12.4 Mo")
   const fileInputRef = useRef<HTMLInputElement>(null);   // Référence à l'input file caché
 
   // Met à jour un champ du formulaire de façon immutable
@@ -74,6 +75,8 @@ export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLa
     }
     setError('');
     setUploading(true);
+    // Affiche la taille du fichier pour que l'utilisateur sache combien de temps attendre
+    setUploadSize((file.size / (1024 * 1024)).toFixed(1) + ' Mo');
     try {
       const safeName = file.name.replace(/[^a-z0-9._-]/gi, '_');
       const pathname = `beats/${Date.now()}-${safeName}`;
@@ -88,8 +91,10 @@ export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLa
       // Stocke l'URL Vercel Blob dans le champ previewUrl du formulaire
       set('previewUrl', blob.url);
       setUploadedName(file.name);
+      setUploadSize('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur lors de l\'upload.');
+      setUploadSize('');
     } finally {
       setUploading(false);
     }
@@ -255,7 +260,15 @@ export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLa
               }`}
             >
               {uploading ? (
-                <p className="text-gray-400 text-sm">Upload en cours…</p>
+                <div className="space-y-3">
+                  <p className="text-gray-300 text-sm font-medium">Upload en cours… {uploadSize && `(${uploadSize})`}</p>
+                  {/* Barre de progression animée — indique que le transfert est actif */}
+                  <div className="w-full bg-[#2A2A2A] rounded-full h-1.5 overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-violet-600 to-purple-400 rounded-full animate-pulse"
+                         style={{ width: '100%' }} />
+                  </div>
+                  <p className="text-gray-500 text-xs">Les fichiers volumineux peuvent prendre quelques secondes</p>
+                </div>
               ) : uploadedName ? (
                 /* Confirmation d'upload réussi */
                 <div className="space-y-1">

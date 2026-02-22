@@ -1,51 +1,50 @@
 // src/app/api/upload/route.ts
-// Upload de fichiers audio (MP3, WAV) vers Vercel Blob.
-// Vercel Blob est un stockage objet persistant — contrairement au système de fichiers
-// de Vercel qui est en lecture seule en production (les fichiers écrits via fs sont perdus).
-// L'utilisateur doit être authentifié pour uploader (évite l'abus de stockage).
+// Upload côté client via Vercel Blob — contourne la limite 4.5 MB des fonctions serverless.
+//
+// Flux en deux phases :
+//   1. Navigateur → /api/upload : demande un token client
+//      onBeforeGenerateToken : vérifie l'auth + définit les contraintes (types, taille max)
+//   2. Navigateur → Vercel Blob : upload direct avec le token (sans passer par le serveur)
+//      Vercel Blob → /api/upload : callback de confirmation (onUploadCompleted)
 
-import { NextRequest } from 'next/server';
-import { put } from '@vercel/blob';
-import { requireAuth, AuthError } from '@/backend/lib/auth';
-import { ok, err } from '@/backend/lib/api-response';
+import { handleUpload } from '@vercel/blob/client';
+import { requireAuth } from '@/backend/lib/auth';
 
-const MAX_SIZE      = 50 * 1024 * 1024; // 50 Mo en octets
 const ALLOWED_TYPES = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav'];
 
-export async function POST(req: NextRequest) {
+export async function POST(request: Request): Promise<Response> {
+  const body = await request.json();
+
   try {
-    // Vérifie l'authentification — seul un utilisateur connecté peut uploader
-    await requireAuth();
+    const jsonResponse = await handleUpload({
+      body,
+      request,
 
-    const formData = await req.formData();
-    const file = formData.get('file') as File | null;
+      // Phase 1 : vérification auth + contraintes avant de générer le token client
+      onBeforeGenerateToken: async (_pathname: string) => {
+        // Vérifie que l'utilisateur est connecté (cookie JWT)
+        // Lance une erreur si non authentifié → refus du token
+        await requireAuth();
 
-    if (!file) return err('Aucun fichier fourni.', 400);
+        return {
+          allowedContentTypes: ALLOWED_TYPES,    // Types MIME autorisés
+          maximumSizeInBytes: 50 * 1024 * 1024,  // 50 Mo max
+          addRandomSuffix: true,                  // Garantit l'unicité du nom de fichier
+        };
+      },
 
-    // Double vérification : MIME type ET extension (certains navigateurs envoient un MIME générique)
-    if (!ALLOWED_TYPES.includes(file.type) && !file.name.match(/\.(mp3|wav)$/i)) {
-      return err('Format non supporté. Utilisez MP3 ou WAV.', 400);
-    }
+      // Phase 2 : callback appelé par Vercel après upload réussi
+      // Note : cette requête vient des serveurs Vercel, pas du navigateur (pas de cookie)
+      onUploadCompleted: async ({ blob }: { blob: { url: string } }) => {
+        console.log('Upload terminé :', blob.url);
+      },
+    });
 
-    // Limite de taille — vérifiée aussi côté client dans BeatForm pour une meilleure UX
-    if (file.size > MAX_SIZE) return err('Fichier trop volumineux (max 50 Mo).', 400);
-
-    // Sanitize le nom de fichier : remplace les caractères spéciaux par des underscores
-    // pour éviter les problèmes de chemin et les injections dans l'URL Blob
-    const safeName = file.name.replace(/[^a-z0-9._-]/gi, '_');
-
-    // Préfixe beats/ pour organiser les fichiers dans le bucket Blob
-    // Date.now() garantit l'unicité même si deux fichiers ont le même nom
-    const filename = `beats/${Date.now()}-${safeName}`;
-
-    // Upload vers Vercel Blob — retourne une URL publique permanente (CDN)
-    const blob = await put(filename, file, { access: 'public' });
-
-    // Retourne l'URL publique que le formulaire stockera dans previewUrl du beat
-    return ok({ url: blob.url }, 201);
-  } catch (e) {
-    if (e instanceof AuthError) return err('Non authentifié.', 401);
-    console.error('Upload error:', e);
-    return err("Erreur lors de l'upload.", 500);
+    return Response.json(jsonResponse);
+  } catch (error) {
+    return Response.json(
+      { success: false, error: (error as Error).message },
+      { status: 400 }
+    );
   }
 }

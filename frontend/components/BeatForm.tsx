@@ -5,6 +5,7 @@
 'use client';
 
 import { useState, FormEvent, useRef, DragEvent, memo } from 'react';
+import { upload } from '@vercel/blob/client';
 
 interface BeatFormData {
   title: string;
@@ -57,7 +58,9 @@ export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLa
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
-  // Envoie le fichier audio à /api/upload → Vercel Blob → récupère l'URL publique
+  // Upload direct du fichier vers Vercel Blob via upload() côté client.
+  // Le fichier ne transite pas par la fonction serverless → pas de limite 4.5 MB.
+  // Flux : navigateur → /api/upload (token) → Vercel Blob CDN (fichier)
   async function uploadFile(file: File) {
     // Validation MIME type + extension (double vérification car le MIME peut être absent)
     if (!file.type.match(/audio\/(mpeg|mp3|wav|wave|x-wav)/) && !file.name.match(/\.(mp3|wav)$/i)) {
@@ -72,17 +75,21 @@ export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLa
     setError('');
     setUploading(true);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      // POST multipart/form-data vers la route API d'upload
-      const res = await fetch('/api/upload', { method: 'POST', body: fd });
-      const json = await res.json();
-      if (!json.success) { setError(json.error ?? 'Erreur upload.'); return; }
+      const safeName = file.name.replace(/[^a-z0-9._-]/gi, '_');
+      const pathname = `beats/${Date.now()}-${safeName}`;
+
+      // upload() demande d'abord un token à /api/upload, puis envoie le fichier
+      // directement à Vercel Blob sans passer par la fonction serverless
+      const blob = await upload(pathname, file, {
+        access: 'public',
+        handleUploadUrl: '/api/upload', // Route qui gère la génération du token
+      });
+
       // Stocke l'URL Vercel Blob dans le champ previewUrl du formulaire
-      set('previewUrl', json.data.url);
+      set('previewUrl', blob.url);
       setUploadedName(file.name);
-    } catch {
-      setError('Erreur réseau lors de l\'upload.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur lors de l\'upload.');
     } finally {
       setUploading(false);
     }

@@ -21,6 +21,4 @@ next-env.d.ts
 .DS_Store
 *.log
 .vercel
-
-# Claude Code
-.claude/
+.vscode/

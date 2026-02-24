@@ -14,8 +14,9 @@ out/
 # Prisma
 prisma/migrations/.gitignore
 
-# Auto-généré par Next.js
+# Auto-généré par Next.js / TypeScript
 next-env.d.ts
+tsconfig.tsbuildinfo
 
 # Divers
 .DS_Store

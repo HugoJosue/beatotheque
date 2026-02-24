@@ -50,8 +50,7 @@
 └──────────────┘          └──────────────┘          └──────────────┘
 ```
 
-> Note : Générez le diagramme visuel avec dbdiagram.io (importer le SQL ci-dessous)
-> et exportez en PNG/PDF sous le nom `ERD.png` à la racine du dépôt.
+
 
 ## SQL pour dbdiagram.io
 

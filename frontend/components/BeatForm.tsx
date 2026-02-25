@@ -83,19 +83,32 @@ export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLa
       const safeName = file.name.replace(/[^a-z0-9._-]/gi, '_');
       const pathname = `beats/${Date.now()}-${safeName}`;
 
+      // Pour les gros fichiers, Vercel Blob fait un upload multipart :
+      // onUploadProgress repart de 0 à chaque partie.
+      // On accumule les octets des parties précédentes pour avoir une progression globale continue.
+      let partOffset = 0;  // octets confirmés des parties précédentes
+      let lastLoaded = 0;  // dernier `loaded` reçu pour détecter le début d'une nouvelle partie
+
       // upload() demande d'abord un token à /api/upload, puis envoie le fichier
       // directement à Vercel Blob sans passer par la fonction serverless
       const blob = await upload(pathname, file, {
         access: 'public',
         handleUploadUrl: '/api/upload', // Route qui gère la génération du token
-        onUploadProgress: ({ percentage }) => setUploadProgress(percentage),
+        onUploadProgress: ({ loaded }) => {
+          if (loaded < lastLoaded) {
+            // Nouvelle partie détectée : on capitalise les octets de la partie précédente
+            partOffset += lastLoaded;
+          }
+          lastLoaded = loaded;
+          const overall = Math.min(Math.round(((partOffset + loaded) / file.size) * 100), 99);
+          setUploadProgress(overall);
+        },
       });
 
       // Stocke l'URL Vercel Blob dans le champ previewUrl du formulaire
       set('previewUrl', blob.url);
       setUploadedName(file.name);
       setUploadSize('');
-      setUploadProgress(0);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur lors de l\'upload.');
       setUploadSize('');

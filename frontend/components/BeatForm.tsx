@@ -34,8 +34,7 @@ const KEYS   = ['C major', 'C minor', 'D major', 'D minor', 'E major', 'E minor'
 // Yields réguliers vers le navigateur pour ne pas bloquer l'UI.
 async function convertWavToMp3(file: File): Promise<File> {
   // Import dynamique pour ne charger lamejs que si un WAV est déposé
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { Mp3Encoder } = (await import('lamejs')) as any;
+  const { Mp3Encoder } = await import('lamejs');
 
   const audioCtx = new AudioContext();
   const audioBuffer = await audioCtx.decodeAudioData(await file.arrayBuffer());

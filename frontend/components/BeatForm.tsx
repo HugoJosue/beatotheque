@@ -52,6 +52,7 @@ export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLa
   const [uploading, setUploading]   = useState(false);   // Upload Vercel Blob en cours
   const [uploadedName, setUploadedName] = useState('');  // Nom affiché après upload réussi
   const [uploadSize, setUploadSize] = useState('');      // Taille du fichier (ex: "12.4 Mo")
+  const [uploadProgress, setUploadProgress] = useState(0); // Progression réelle 0–100
   const fileInputRef = useRef<HTMLInputElement>(null);   // Référence à l'input file caché
 
   // Met à jour un champ du formulaire de façon immutable
@@ -75,6 +76,7 @@ export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLa
     }
     setError('');
     setUploading(true);
+    setUploadProgress(0);
     // Affiche la taille du fichier pour que l'utilisateur sache combien de temps attendre
     setUploadSize((file.size / (1024 * 1024)).toFixed(1) + ' Mo');
     try {
@@ -86,15 +88,18 @@ export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLa
       const blob = await upload(pathname, file, {
         access: 'public',
         handleUploadUrl: '/api/upload', // Route qui gère la génération du token
+        onUploadProgress: ({ percentage }) => setUploadProgress(percentage),
       });
 
       // Stocke l'URL Vercel Blob dans le champ previewUrl du formulaire
       set('previewUrl', blob.url);
       setUploadedName(file.name);
       setUploadSize('');
+      setUploadProgress(0);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur lors de l\'upload.');
       setUploadSize('');
+      setUploadProgress(0);
     } finally {
       setUploading(false);
     }
@@ -261,11 +266,15 @@ export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLa
             >
               {uploading ? (
                 <div className="space-y-3">
-                  <p className="text-gray-300 text-sm font-medium">Upload en cours… {uploadSize && `(${uploadSize})`}</p>
-                  {/* Barre de progression animée — indique que le transfert est actif */}
+                  <p className="text-gray-300 text-sm font-medium">
+                    Upload en cours… {uploadSize && `(${uploadSize})`} — {uploadProgress}%
+                  </p>
+                  {/* Barre de progression réelle basée sur onUploadProgress */}
                   <div className="w-full bg-[#2A2A2A] rounded-full h-1.5 overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-violet-600 to-purple-400 rounded-full animate-pulse"
-                         style={{ width: '100%' }} />
+                    <div
+                      className="h-full bg-gradient-to-r from-violet-600 to-purple-400 rounded-full transition-all duration-300"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
                   </div>
                   <p className="text-gray-500 text-xs">Les fichiers volumineux peuvent prendre quelques secondes</p>
                 </div>

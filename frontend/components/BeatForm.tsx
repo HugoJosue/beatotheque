@@ -56,7 +56,7 @@ async function convertWavToMp3(file: File): Promise<File> {
   const left  = toInt16(audioBuffer.getChannelData(0));
   const right = channels > 1 ? toInt16(audioBuffer.getChannelData(1)) : left;
 
-  const mp3Chunks: Uint8Array[] = [];
+  const mp3Chunks: BlobPart[] = [];
   const FRAME      = 1152;
   const BATCH      = FRAME * 128; // ~128 frames entre chaque yield (~0.3 s de son)
 

@@ -65,11 +65,11 @@ async function convertWavToMp3(file: File): Promise<File> {
     const end = Math.min(i + BATCH, left.length);
     for (let j = i; j < end; j += FRAME) {
       const buf = encoder.encodeBuffer(left.subarray(j, j + FRAME), right.subarray(j, j + FRAME));
-      if (buf.length > 0) mp3Chunks.push(new Uint8Array(buf));
+      if (buf.length > 0) mp3Chunks.push(Uint8Array.from(buf));
     }
   }
   const tail = encoder.flush();
-  if (tail.length > 0) mp3Chunks.push(new Uint8Array(tail));
+  if (tail.length > 0) mp3Chunks.push(Uint8Array.from(tail));
 
   const mp3Blob = new Blob(mp3Chunks, { type: 'audio/mpeg' });
   const mp3Name = file.name.replace(/\.wav$/i, '.mp3');

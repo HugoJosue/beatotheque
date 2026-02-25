@@ -29,6 +29,54 @@ const STYLES = ['Trap', 'Lo-fi', 'Drill', 'Boom Bap', 'R&B', 'Afrobeats', 'House
 const KEYS   = ['C major', 'C minor', 'D major', 'D minor', 'E major', 'E minor', 'F major',
                  'F minor', 'G major', 'G minor', 'A major', 'A minor', 'B major', 'B minor'];
 
+// Convertit un fichier WAV en MP3 192 kbps via lamejs (encodeur JS pur).
+// Réduit la taille d'un facteur ~5 avant l'upload, sans passer par un serveur.
+// Yields réguliers vers le navigateur pour ne pas bloquer l'UI.
+async function convertWavToMp3(file: File): Promise<File> {
+  // Import dynamique pour ne charger lamejs que si un WAV est déposé
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { Mp3Encoder } = (await import('lamejs')) as any;
+
+  const audioCtx = new AudioContext();
+  const audioBuffer = await audioCtx.decodeAudioData(await file.arrayBuffer());
+  audioCtx.close();
+
+  const channels   = audioBuffer.numberOfChannels;
+  const sampleRate = audioBuffer.sampleRate;
+  const encoder    = new Mp3Encoder(channels, sampleRate, 192);
+
+  // Web Audio donne des Float32 [-1, 1] ; lamejs attend des Int16
+  function toInt16(f32: Float32Array): Int16Array {
+    const out = new Int16Array(f32.length);
+    for (let i = 0; i < f32.length; i++) {
+      out[i] = Math.max(-32768, Math.min(32767, f32[i] * 32768));
+    }
+    return out;
+  }
+
+  const left  = toInt16(audioBuffer.getChannelData(0));
+  const right = channels > 1 ? toInt16(audioBuffer.getChannelData(1)) : left;
+
+  const mp3Chunks: Uint8Array[] = [];
+  const FRAME      = 1152;
+  const BATCH      = FRAME * 128; // ~128 frames entre chaque yield (~0.3 s de son)
+
+  for (let i = 0; i < left.length; i += BATCH) {
+    await new Promise<void>((r) => setTimeout(r, 0)); // cède la main au navigateur
+    const end = Math.min(i + BATCH, left.length);
+    for (let j = i; j < end; j += FRAME) {
+      const buf = encoder.encodeBuffer(left.subarray(j, j + FRAME), right.subarray(j, j + FRAME));
+      if (buf.length > 0) mp3Chunks.push(new Uint8Array(buf));
+    }
+  }
+  const tail = encoder.flush();
+  if (tail.length > 0) mp3Chunks.push(new Uint8Array(tail));
+
+  const mp3Blob = new Blob(mp3Chunks, { type: 'audio/mpeg' });
+  const mp3Name = file.name.replace(/\.wav$/i, '.mp3');
+  return new File([mp3Blob], mp3Name, { type: 'audio/mpeg' });
+}
+
 // memo() est utile ici car la page parente peut se re-rendre (ex: navigation)
 // sans que les props du formulaire aient changé
 export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLabel }: Props) {
@@ -49,6 +97,7 @@ export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLa
   // Mode d'entrée audio : URL externe ou fichier uploadé
   const [audioMode, setAudioMode]   = useState<'url' | 'file'>('url');
   const [dragOver, setDragOver]     = useState(false);   // Zone drag & drop survol
+  const [compressing, setCompressing] = useState(false); // Conversion WAV→MP3 en cours
   const [uploading, setUploading]   = useState(false);   // Upload Vercel Blob en cours
   const [uploadedName, setUploadedName] = useState('');  // Nom affiché après upload réussi
   const [uploadSize, setUploadSize] = useState('');      // Taille du fichier (ex: "12.4 Mo")
@@ -61,8 +110,8 @@ export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLa
   }
 
   // Upload direct du fichier vers Vercel Blob via upload() côté client.
-  // Le fichier ne transite pas par la fonction serverless → pas de limite 4.5 MB.
-  // Flux : navigateur → /api/upload (token) → Vercel Blob CDN (fichier)
+  // Si le fichier est un WAV, il est d'abord converti en MP3 pour réduire sa taille (~5x).
+  // Flux : [WAV → MP3 optionnel] → navigateur → /api/upload (token) → Vercel Blob CDN
   async function uploadFile(file: File) {
     // Validation MIME type + extension (double vérification car le MIME peut être absent)
     if (!file.type.match(/audio\/(mpeg|mp3|wav|wave|x-wav)/) && !file.name.match(/\.(mp3|wav)$/i)) {
@@ -75,12 +124,27 @@ export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLa
       return;
     }
     setError('');
+
+    // Conversion WAV → MP3 pour réduire la taille avant l'upload
+    let fileToUpload = file;
+    const isWav = file.name.match(/\.wav$/i) || file.type.match(/wav/);
+    if (isWav) {
+      setCompressing(true);
+      try {
+        fileToUpload = await convertWavToMp3(file);
+      } catch {
+        // En cas d'échec de la conversion, on uploade le WAV original
+      } finally {
+        setCompressing(false);
+      }
+    }
+
     setUploading(true);
     setUploadProgress(0);
-    // Affiche la taille du fichier pour que l'utilisateur sache combien de temps attendre
-    setUploadSize((file.size / (1024 * 1024)).toFixed(1) + ' Mo');
+    // Affiche la taille du fichier à uploader (après compression éventuelle)
+    setUploadSize((fileToUpload.size / (1024 * 1024)).toFixed(1) + ' Mo');
     try {
-      const safeName = file.name.replace(/[^a-z0-9._-]/gi, '_');
+      const safeName = fileToUpload.name.replace(/[^a-z0-9._-]/gi, '_');
       const pathname = `beats/${Date.now()}-${safeName}`;
 
       // Pour les gros fichiers, Vercel Blob fait un upload multipart :
@@ -91,7 +155,7 @@ export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLa
 
       // upload() demande d'abord un token à /api/upload, puis envoie le fichier
       // directement à Vercel Blob sans passer par la fonction serverless
-      const blob = await upload(pathname, file, {
+      const blob = await upload(pathname, fileToUpload, {
         access: 'public',
         handleUploadUrl: '/api/upload', // Route qui gère la génération du token
         onUploadProgress: ({ loaded }) => {
@@ -100,14 +164,14 @@ export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLa
             partOffset += lastLoaded;
           }
           lastLoaded = loaded;
-          const overall = Math.min(Math.round(((partOffset + loaded) / file.size) * 100), 99);
+          const overall = Math.min(Math.round(((partOffset + loaded) / fileToUpload.size) * 100), 99);
           setUploadProgress(overall);
         },
       });
 
       // Stocke l'URL Vercel Blob dans le champ previewUrl du formulaire
       set('previewUrl', blob.url);
-      setUploadedName(file.name);
+      setUploadedName(file.name); // Affiche le nom du fichier original
       setUploadSize('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur lors de l\'upload.');
@@ -164,6 +228,8 @@ export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLa
       setLoading(false);
     }
   }
+
+  const busy = compressing || uploading;
 
   return (
     <form onSubmit={handleSubmit} className="card space-y-5">
@@ -270,14 +336,27 @@ export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLa
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
               onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()} // Ouvre le sélecteur de fichier
-              className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition ${
-                dragOver
-                  ? 'border-violet-500 bg-violet-900/20'
-                  : 'border-[#2A2A2A] hover:border-violet-700 hover:bg-[#1E1E1E]'
+              onClick={() => !busy && fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-xl p-8 text-center transition ${
+                busy
+                  ? 'border-[#2A2A2A] cursor-default'
+                  : dragOver
+                  ? 'border-violet-500 bg-violet-900/20 cursor-pointer'
+                  : 'border-[#2A2A2A] hover:border-violet-700 hover:bg-[#1E1E1E] cursor-pointer'
               }`}
             >
-              {uploading ? (
+              {compressing ? (
+                /* Conversion WAV → MP3 en cours (encodage JS côté client) */
+                <div className="space-y-3">
+                  <p className="text-gray-300 text-sm font-medium">Conversion WAV → MP3…</p>
+                  <div className="w-full bg-[#2A2A2A] rounded-full h-1.5 overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-violet-600 to-purple-400 rounded-full animate-pulse"
+                         style={{ width: '100%' }} />
+                  </div>
+                  <p className="text-gray-500 text-xs">Compression avant upload pour accélérer le transfert</p>
+                </div>
+              ) : uploading ? (
+                /* Upload en cours avec progression réelle */
                 <div className="space-y-3">
                   <p className="text-gray-300 text-sm font-medium">
                     Upload en cours… {uploadSize && `(${uploadSize})`} — {uploadProgress}%
@@ -337,7 +416,7 @@ export const BeatForm = memo(function BeatForm({ initialData, onSubmit, submitLa
       )}
 
       {/* Bouton désactivé pendant la soumission ou l'upload */}
-      <button type="submit" disabled={loading || uploading} className="btn-primary w-full py-3">
+      <button type="submit" disabled={loading || busy} className="btn-primary w-full py-3">
         {loading ? 'Enregistrement…' : submitLabel}
       </button>
     </form>
